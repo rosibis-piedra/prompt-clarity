@@ -3,21 +3,21 @@ from flask_cors import CORS
 from openai import OpenAI
 import numpy as np
 import os
-
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+app = Flask(__name__)
+
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     allow_headers=["Content-Type"],
+     methods=["GET", "POST", "OPTIONS"])
 
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["100 per day"]
 )
-
-app = Flask(__name__)
-CORS(app, 
-     resources={r"/*": {"origins": "*"}},
-     allow_headers=["Content-Type"],
-     methods=["GET", "POST", "OPTIONS"])
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
