@@ -1,10 +1,18 @@
 from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 from openai import OpenAI
 import numpy as np
 import os
 
 app = Flask(__name__)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "10 per minute"],
+    storage_uri="memory://"
+)
 CORS(app, 
      resources={r"/*": {"origins": "*"}},
      allow_headers=["Content-Type"],
@@ -27,6 +35,7 @@ def home():
     return jsonify({"status": "Rosetta AI Backend Running"})
 
 @app.route('/analyze', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per minute")
 def analyze():
     if request.method == 'OPTIONS':
         return '', 204
