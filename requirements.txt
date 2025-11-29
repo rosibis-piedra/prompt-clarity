@@ -2,5 +2,5 @@ flask
 flask-cors
 openai
 numpy
-gunicorn
-Flask-Limiter
+flask-limiter
+requests

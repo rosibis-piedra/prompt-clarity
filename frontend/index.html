@@ -3,14 +3,16 @@
 <head>
     <title>🎯 Prompt Clarity</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-PG3JJSDBHK"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-PG3JJSDBHK');
-</script>
+    <!-- Google reCAPTCHA -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PG3JJSDBHK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-PG3JJSDBHK');
+    </script>
     <style>
         * {
             margin: 0;
@@ -79,12 +81,17 @@
             transition: transform 0.2s;
         }
         
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
         }
         
-        button:active {
+        button:active:not(:disabled) {
             transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         
         #loading {
@@ -174,6 +181,12 @@
             line-height: 1.5;
         }
 
+        .recaptcha-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
         footer {
             text-align: center;
             padding: 40px 20px;
@@ -209,7 +222,12 @@
                    id="wordInput" 
                    placeholder="Enter a word..."
                    onkeypress="if(event.key==='Enter') analyzeWord()">
-            <button onclick="analyzeWord()">Analyze</button>
+            <button id="analyzeBtn" onclick="analyzeWord()">Analyze</button>
+        </div>
+
+        <!-- Google reCAPTCHA v2 -->
+        <div class="recaptcha-container">
+            <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
         </div>
         
         <div id="loading">
@@ -240,7 +258,7 @@
                 AI Engineer | Building tools that matter
             </p>
             <p style="margin: 10px 0 0 0; font-size: 12px;">
-                <a href="https://github.com/rosibis-piedra/rosetta-ai" target="_blank" style="color: #999; text-decoration: none;">View on GitHub</a>
+                <a href="https://github.com/rosibis-piedra/prompt-clarity" target="_blank" style="color: #999; text-decoration: none;">View on GitHub</a>
             </p>
         </footer>
     </div>
@@ -248,13 +266,31 @@
     <script>
         let contextChart;
         
+        // Generate CSRF token on page load
+        let csrfToken = generateCSRFToken();
+        
+        function generateCSRFToken() {
+            return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+        
         async function analyzeWord() {
             const word = document.getElementById('wordInput').value.trim();
             if (!word) {
                 alert('Please enter a word');
                 return;
             }
-            const button = document.getElementById('analyze-btn');
+
+            // Verificar reCAPTCHA
+            const recaptchaResponse = grecaptcha.getResponse();
+            if (!recaptchaResponse) {
+                alert('Please complete the reCAPTCHA verification');
+                return;
+            }
+            
+            // SECURITY #1: Disable button during analysis
+            const button = document.getElementById('analyzeBtn');
             button.disabled = true;
             const originalText = button.textContent;
             button.textContent = 'Analyzing...';
@@ -263,32 +299,43 @@
             document.getElementById('results').style.display = 'none';
             
             try {
-    const response = await fetch('https://rosetta-ai.onrender.com/analyze', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({word: word})
-    });
-    
-    if (!response.ok) {
-        throw new Error('Analysis failed');
-    }
-    
-    const data = await response.json();
-    
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('results').style.display = 'block';
-    document.getElementById('wordTitle').textContent = `"${data.word}"`;
-    
-    updateCharts(data);
-    
-} catch (error) {
-    document.getElementById('loading').style.display = 'none';
-    alert('Error: Make sure backend is running');
-    console.error(error);
-} finally {
-    button.disabled = false;
-    button.textContent = originalText;
-}
+                const response = await fetch('https://rosetta-ai.onrender.com/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken  // SECURITY #3: CSRF token
+                    },
+                    body: JSON.stringify({
+                        word: word,
+                        'g-recaptcha-response': recaptchaResponse  // SECURITY #2: reCAPTCHA
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Analysis failed');
+                }
+                
+                const data = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('wordTitle').textContent = `"${data.word}"`;
+                
+                updateCharts(data);
+                
+                // Reset reCAPTCHA after successful analysis
+                grecaptcha.reset();
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                alert('Error: Analysis failed. Please try again.');
+                console.error(error);
+                grecaptcha.reset();
+            } finally {
+                // SECURITY #1: Re-enable button
+                button.disabled = false;
+                button.textContent = originalText;
+            }
         }
         
         function updateCharts(data) {
